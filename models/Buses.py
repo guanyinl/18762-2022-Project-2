@@ -29,6 +29,9 @@ class Buses:
 
         self.Bus = Bus
         self.Type = Type
+        self.Vm_init = Vm_init
+        self.Va_init = Va_init
+        self.Area = Area
 
         # initialize all nodes
         self.node_Vr = None  # real voltage node at a bus

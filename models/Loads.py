@@ -29,6 +29,9 @@ class Loads:
             status (bool): indicates if the load is in-service or out-of-service.
         """
         self.id = Loads._ids.__next__()
+        self.Bus = Bus
+        self.P = P
+        self.Q = Q
 
         # You will need to implement the remainder of the __init__ function yourself.
         # You should also add some other class functions you deem necessary for stamping,

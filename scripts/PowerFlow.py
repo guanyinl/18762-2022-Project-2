@@ -1,3 +1,4 @@
+from sqlite3 import Row
 import numpy as np
 
 
@@ -24,6 +25,7 @@ class PowerFlow:
         self.tol = tol
         self.max_iters = max_iters
         self.enable_limiting = enable_limiting
+    
 
     def solve(self):
         pass
@@ -34,7 +36,78 @@ class PowerFlow:
     def check_error(self):
         pass
 
-    def stamp_linear(self):
+    def stamp_linear(self, v_init, row_Y, columun_Y, value_Y, parsed_data):
+        value_temp = 0
+        i = 0
+        #update Y for real variables in branches. （The main diagonal)
+        for bus in parsed_data['buses']:
+            for branch in parsed_data['branches']:
+                if bus.Bus == branch.from_bus:
+                    value_temp = (branch.r/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #G part of the branch
+                    row_Y[i]= (bus.Bus-1)*2
+                    columun_Y[i] = (bus.Bus-1)*2
+                    value_Y[i] = value_Y[i]+value_temp 
+                if bus.Bus == branch.to_bus:
+                    value_temp = (branch.r/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #G part of the branch
+                    row_Y[i]= (bus.Bus-1)*2
+                    columun_Y[i] = (bus.Bus-1)*2
+                    value_Y[i] = value_Y[i]+value_temp 
+
+            i = i+1
+
+        #update Y for imaginary variables in branches. （The main diagonal)
+        for bus in parsed_data['buses']:
+            for branch in parsed_data['branches']:
+                if bus.Bus == branch.from_bus:
+                    value_temp = (branch.r/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #G part of the branch
+                    row_Y[i]= bus.Bus*2-1
+                    columun_Y[i] = bus.Bus*2-1
+                    value_Y[i] = value_Y[i]+value_temp 
+                if bus.Bus == branch.to_bus:
+                    value_temp = (branch.r/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #G part of the branch
+                    row_Y[i]= bus.Bus*2-1
+                    columun_Y[i] = bus.Bus*2-1
+                    value_Y[i] = value_Y[i]+value_temp 
+
+            i = i+1
+
+        #update Y for real variables's imaginary partners in branches. （diagonal)
+        for bus in parsed_data['buses']:
+            for branch in parsed_data['branches']:
+                if bus.Bus == branch.from_bus:
+                    value_temp = (branch.x/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #-B part of the branch
+                    row_Y[i]= (bus.Bus-1)*2
+                    columun_Y[i] = (bus.Bus-1)*2+1
+                    value_Y[i] = value_Y[i]+value_temp 
+                if bus.Bus == branch.to_bus:
+                    value_temp = (branch.x/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #-B part of the branch
+                    row_Y[i]= (bus.Bus-1)*2
+                    columun_Y[i] = (bus.Bus-1)*2+1
+                    value_Y[i] = value_Y[i]+value_temp 
+
+            i = i+1
+
+        #update Y for imaginary variables's real partners in branches. （diagonal)
+        for bus in parsed_data['buses']:
+            for branch in parsed_data['branches']:
+                if bus.Bus == branch.from_bus:
+                    value_temp = -1*(branch.x/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #B part of the branch
+                    row_Y[i]= bus.Bus*2-1
+                    columun_Y[i] = bus.Bus*2-1-1
+                    value_Y[i] = value_Y[i]+value_temp 
+                if bus.Bus == branch.to_bus:
+                    value_temp = -1*(branch.x/((branch.r)*(branch.r)+(branch.x)*(branch.x))) #B part of the branch
+                    row_Y[i]= bus.Bus*2-1
+                    columun_Y[i] = bus.Bus*2-1-1
+                    value_Y[i] = value_Y[i]+value_temp 
+
+            i = i+1
+
+
+        print (row_Y)
+        print (columun_Y)
+        print (value_Y)
+
         pass
 
     def stamp_nonlinear(self):
@@ -48,7 +121,11 @@ class PowerFlow:
                       transformer,
                       branch,
                       shunt,
-                      load):
+                      load,
+                      row_Y, 
+                      columun_Y, 
+                      value_Y,
+                      parsed_data):
         """Runs a positive sequence power flow using the Equivalent Circuit Formulation.
 
         Args:
@@ -74,12 +151,12 @@ class PowerFlow:
         # TODO: PART 1, STEP 2.1 - Complete the stamp_linear function which stamps all linear power grid elements.
         #  This function should call the stamp_linear function of each linear element and return an updated Y matrix.
         #  You need to decide the input arguments and return values.
-        self.stamp_linear()
+        self.stamp_linear(v_init, row_Y, columun_Y, value_Y, parsed_data)
 
         # # # Initialize While Loop (NR) Variables # # #
         # TODO: PART 1, STEP 2.2 - Initialize the NR variables
-        err_max = None  # maximum error at the current NR iteration
-        tol = None  # chosen NR tolerance
+        err_max = 1  # maximum error at the current NR iteration
+        tol = 2  # chosen NR tolerance
         NR_count = None  # current NR iteration
 
         # # # Begin Solving Via NR # # #

@@ -1,3 +1,6 @@
+from curses import raw
+from multiprocessing.sharedctypes import Value
+from pickle import NONE
 from parsers.parser import parse_raw
 from scripts.PowerFlow import PowerFlow
 from scripts.process_results import process_results
@@ -52,17 +55,22 @@ def solve(TESTCASE, SETTINGS):
 
     # TODO: PART 1, STEP 1 - Complete the function to initialize your solution vector v_init.
     v_init = None  # create a solution vector filled with zeros of size_Y
-    v_init = initialize()
-
+    v_init = initialize(parsed_data, case_name)
+    
     # # # Run Power Flow # # #
     powerflow = PowerFlow(case_name, tol, max_iters, enable_limiting)
 
     # TODO: PART 1, STEP 2 - Complete the PowerFlow class and build your run_powerflow function to solve Equivalent
     #  Circuit Formulation powerflow. The function will return a final solution vector v. Remove run_pf and the if
     #  condition once you've finished building your solver.
-    run_pf = False
+
+    row_Y = [0]*30
+    columun_Y = [0]*30
+    value_Y = [0]*30
+
+    run_pf = True
     if run_pf:
-        v = powerflow.run_powerflow(v_init, bus, slack, generator, transformer, branch, shunt, load)
+        v = powerflow.run_powerflow(v_init, bus, slack, generator, transformer, branch, shunt, load, row_Y, columun_Y, value_Y, parsed_data)
 
     # # # Process Results # # #
     # TODO: PART 1, STEP 3 - Write a process_results function to compute the relevant results (voltages, powers,

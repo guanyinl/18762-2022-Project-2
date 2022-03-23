@@ -1,4 +1,5 @@
 from __future__ import division
+from ctypes.wintypes import PINT
 from models.Buses import Buses
 
 
@@ -20,6 +21,11 @@ class Slack:
             Qinit (float): the initial reactive power that the slack bus is supplying
         """
         # You will need to implement the remainder of the __init__ function yourself.
+        self.ang = ang
+        self.Vset = Vset
+        self.Bus = Bus
+        self.Pinit = Pinit
+        self.Qinit = Qinit
 
         # initialize nodes
         self.node_Vr_Slack = None
