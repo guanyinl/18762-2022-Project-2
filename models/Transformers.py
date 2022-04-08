@@ -1,5 +1,6 @@
 from __future__ import division
 from itertools import count
+from re import X
 
 
 class Transformers:
@@ -31,7 +32,14 @@ class Transformers:
             rating (float): the rating in MVA of the transformer
         """
         self.id = self._ids.__next__()
+        self.from_bus = from_bus
+        self.to_bus = to_bus
+        self.tr = tr
+        self.ang = ang
+        self.r = r
+        self.x = x
 
+        
         # You will need to implement the remainder of the __init__ function yourself.
         # You should also add some other class functions you deem necessary for stamping,
         # initializing, and processing results.

@@ -7,11 +7,12 @@ from parsers.parser import parse_raw
 from scripts.PowerFlow import PowerFlow
 from scripts.process_results import process_results
 from scripts.initialize import initialize
-from scripts.csc_size import csc_size
+from scripts.matrix_size import matrix_size
 from models.Buses import Buses
 
 
 def solve(TESTCASE, SETTINGS):
+    
     print ("time.time(): %f " %  time.time())
     print ("Simulation starts at = ", time.asctime( time.localtime(time.time())))
     """Run the power flow solver.
@@ -57,12 +58,27 @@ def solve(TESTCASE, SETTINGS):
 
     # determine the size of the Y matrix by looking at the total number of nodes in the system
     size_Y = Buses._node_index.__next__()
+    (size_Y_csc, size_Y) = matrix_size(parsed_data, size_Y)
     #print (size_Y)
 
     # TODO: PART 1, STEP 1 - Complete the function to initialize your solution vector v_init.
     v_init = None  # create a solution vector filled with zeros of size_Y
     v_init = initialize(parsed_data, case_name, size_Y)
     
+    #for ele in parsed_data['xfmrs']:
+    #    print ('xfrmrs = ', ele.from_bus, ele.to_bus, 'tr = ', ele.tr, 'angle =', ele.ang, ' r = ', ele.r, ' x =', ele.x)
+    #for slack in parsed_data['slack']:
+    #    print ('slack bus =', slack.Bus, 'Vset =', slack.Vset)
+    #for gen in parsed_data['generators']:
+    #    print ('gen bus =', gen.Bus, 'Vset =', gen.Vset)
+    #for load in parsed_data['loads']:
+    #    print ('load bus =', load.Bus)
+    #for ele in parsed_data['branches']:
+    #    print ('branches = ', ele.from_bus, ele.to_bus, 'r =', ele.r, 'x =', ele.x, 'b =', ele.b)
+    #for ele in parsed_data['shunts']:
+    #    print ('shunts = ', ele.Bus, 'G_MW =', ele.G_MW, 'B_MVAR =', ele.B_MVAR)
+        
+
     # # # Run Power Flow # # #
     powerflow = PowerFlow(case_name, tol_setting, max_iters, enable_limiting)
 
@@ -70,13 +86,12 @@ def solve(TESTCASE, SETTINGS):
     #  Circuit Formulation powerflow. The function will return a final solution vector v. Remove run_pf and the if
     #  condition once you've finished building your solver.
     
-    size_Y_csc = csc_size(parsed_data)
-    #print (size_Y_csc)
+    #print (size_Y)
 
-    row_Y = [0]*size_Y_csc
-    columun_Y = [0]*size_Y_csc
-    value_Y = [0]*size_Y_csc
-
+    row_Y = [0]*(size_Y_csc)
+    columun_Y = [0]*(size_Y_csc)
+    value_Y = [0]*(size_Y_csc)
+    
     matrix_J = [0]*size_Y
     matrix_v = [0]*size_Y
 
@@ -84,7 +99,7 @@ def solve(TESTCASE, SETTINGS):
     if run_pf:
         v = powerflow.run_powerflow(v_init, bus, slack, generator, transformer, branch, shunt, load, 
                                     row_Y, columun_Y, value_Y, parsed_data, tol_setting, size_Y, 
-                                    matrix_v, matrix_J)
+                                    matrix_v, matrix_J, size_Y_csc)
 
     # # # Process Results # # #
     # TODO: PART 1, STEP 3 - Write a process_results function to compute the relevant results (voltages, powers,

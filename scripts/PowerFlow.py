@@ -65,8 +65,7 @@ class PowerFlow:
             
                     matrix_J[bus_number*2+gen_number*1+(i_slack)*2] = Vset_r
                     matrix_J[bus_number*2+gen_number*1+(i_slack)*2+1] = Vset_l
-                    #matrix_J[v_index*2] = -1
-                    #matrix_J[v_index*2+1] = 0.6198
+                    
                     i_slack = i_slack+1
         
         #slack bus also has P and Q connected to them, and P and Q need to be added into the matrix.
@@ -79,7 +78,6 @@ class PowerFlow:
                             Vil = matrix_v[v_index*2+1]
                             Pl = load.P
                             Ql = load.Q  
-                            #print ("here!!!", Vrl, Vil, Pl, Ql)
 
                             #Irl part of PQ
                             dIrl_dVrl = (Pl*(np.square(Vrl)+np.square(Vil))-(Pl*Vrl+1*Ql*Vil)*2*Vrl)/np.square(np.square(Vrl)+np.square(Vil))
@@ -96,7 +94,6 @@ class PowerFlow:
                             Vil_hist = -1*(Iil-dIil_dVrl*Vrl-dIil_dVil*Vil)
                             matrix_J[(bus.Bus-1)*2] = Vrl_hist
                             matrix_J[(bus.Bus-1)*2+1] = Vil_hist
-                            #print ("here!!!", (bus.Bus-1)*2, (bus.Bus-1)*2+1)
                             v_index = v_index+1
 
         #for PQ bus
@@ -132,8 +129,7 @@ class PowerFlow:
                     matrix_J[(bus.Bus-1)*2+1] = Vil_hist
                     #print (v_index*2,v_index*2+1, (bus.Bus-1)*2, (bus.Bus-1)*2+1)
                     v_index = v_index+1
-
-
+        gen_number = 0
         for gen in parsed_data['generators']:
             for bus in parsed_data['buses']:
                 if bus.Bus == gen.Bus:
@@ -148,7 +144,7 @@ class PowerFlow:
                     Pg = gen.P
                     Qg = gen.Qinit #it's not just init, it will be updated. 
                     VSet = gen.Vset
-
+                    #print (v_index*2,v_index*2+1)
                     #gen_angle = np.arctan(Qg/Pg)
                     
                     #Irg part of PV
@@ -194,13 +190,14 @@ class PowerFlow:
                     
                             matrix_J[(bus.Bus-1)*2] += Vrl_hist
                             matrix_J[(bus.Bus-1)*2+1] += Vil_hist
-                            #print (v_index*2,v_index*2+1, (bus.Bus-1)*2, (bus.Bus-1)*2+1)
+                            #print (v_index*2,v_index*2+1)
                     
                     #Veq_hist, Vrg and Vig
                     Veg_hist = np.square(VSet)+np.square(Vrg)+np.square(Vig)
-                    matrix_J[(bus.Bus-1)*2+2] = Veg_hist
-                    #print ((bus.Bus-1)*2+2)
+                    matrix_J[bus_number*2+gen_number] = Veg_hist
+                    #print (bus_number*2+gen_number)
                     v_index = v_index+1
+            gen_number = gen_number+1
         return (matrix_v, matrix_J)
 
     def apply_limiting(self, v_last, matrix_v, v_delta_limit, bus_amount, size_Y):
@@ -404,64 +401,395 @@ class PowerFlow:
                     columun_Y[i] = (branch.from_bus-1)*2+1
                     value_Y[i] = value_Y[i]+value_temp 
                     i = i+1   
-                
-        #update Y for Ir1, Ii1 of the slack
-        #!!!!!!!!!!!might not work for more slack buses.!!!!!!!!!!!!
+        
+        bus_number =  0
+        slack_number =  0
+        gen_number = 0
+        trans_number = 0
+        for bus in parsed_data['buses']:
+            bus_number = bus_number+1 #each bus contributes 2 variables in V (Vr, Vi)
         for slack in parsed_data['slack']:
+            slack_number = slack_number+1 #each slack contributes 2 variables in V. (Ir, Ii)
+        for gen in parsed_data['generators']:
+            gen_number = gen_number+1 #each generators contributes 1 variable in V. (Qg)  
+        for trans in parsed_data['xfmrs']:
+            trans_number = trans_number+1
+
+        #update Y for Ir1, Ii1 of the slack
+        for slack in parsed_data['slack']:#fixed for multiple slack buses
             # for Ir
-            row_Y[i] = slack.Bus-1
-            columun_Y[i] = normal_Y_size-2
+            row_Y[i] = (slack.Bus-1)*2
+            columun_Y[i] = bus_number*2+gen_number+(slack.Bus-1)*2
             value_Y[i] = 1
             i = i+1
-
+            
             # for Ii
-            row_Y[i] = slack.Bus
-            columun_Y[i] = normal_Y_size-1
+            row_Y[i] = (slack.Bus-1)*2+1
+            columun_Y[i] = bus_number*2+gen_number+(slack.Bus-1)*2+1
             value_Y[i] = 1
             i = i+1     
-
+            
             # for Vset_r
-            row_Y[i] = normal_Y_size-2 
-            columun_Y[i] = slack.Bus-1
+            row_Y[i] = bus_number*2+gen_number+(slack.Bus-1)*2 
+            columun_Y[i] = (slack.Bus-1)*2
             value_Y[i] = 1
             i = i+1
 
             # for Vset_i
-            row_Y[i] = normal_Y_size-1 
-            columun_Y[i] = slack.Bus
+            row_Y[i] = bus_number*2+gen_number+(slack.Bus-1)*2+1 
+            columun_Y[i] = (slack.Bus-1)*2+1
             value_Y[i] = 1
             i = i+1 
 
         #add empty sapce for generators
+        gen_index = 0
         for gen in parsed_data['generators']:
             for bus in parsed_data['buses']:
                 #add empty sapce for dIrg_dQ and dIig_dQ
-                if bus.Bus == gen.Bus:
+                if bus.Bus == gen.Bus: #(2, 28)(4, 29)(10, 30)(14, 31)
                     row_Y[i] = (bus.Bus-1)*2
-                    columun_Y[i] = (bus.Bus-1)*2+2
+                    columun_Y[i] = (bus_number)*2+gen_index
                     value_Y[i] = 0
+                    #print(row_Y[i], columun_Y[i])
                     i = i+1 
                 
-                if bus.Bus == gen.Bus:
+                if bus.Bus == gen.Bus:#(3 28)(5 29)(11 30)(15 31)
                     row_Y[i] = (bus.Bus-1)*2+1
-                    columun_Y[i] = (bus.Bus-1)*2+2
+                    columun_Y[i] = (bus_number)*2+gen_index
                     value_Y[i] = 0
                     i = i+1 
         
                 #add empty sapce for 2Vrg and 2Vig
                 if bus.Bus == gen.Bus:
-                    row_Y[i] = (bus.Bus-1)*2+2
+                    row_Y[i] = (bus_number)*2+gen_index
                     columun_Y[i] = (bus.Bus-1)*2
                     value_Y[i] = 0
                     #print(row_Y[i], columun_Y[i])
                     i = i+1 
 
-                if bus.Bus == gen.Bus:
-                    row_Y[i] = (bus.Bus-1)*2+2
+                if bus.Bus == gen.Bus: #(28 3)(29 5)(30 11)(31 15)
+                    row_Y[i] = (bus_number)*2+gen_index
                     columun_Y[i] = (bus.Bus-1)*2+1
                     value_Y[i] = 0
-                    #print(row_Y[i], columun_Y[i])
+                    #print(, row_Y[i], columun_Y[i])
                     i = i+1 
+            gen_index = gen_index+1
+
+        #add empty sapce for transformer
+        trans_index = 0
+        for trans in parsed_data['xfmrs']:
+            for bus in parsed_data['buses']:
+                if (trans.to_bus) == (bus.Bus): 
+                    
+                    #(12, 34)(16, 36)(10. 38)
+                    row_Y[i] = (bus.Bus-1)*2
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    value_Y[i] = 0
+                    i = i+1
+                    
+                    #(12, 35)(16, 37)(10. 39)
+                    row_Y[i] = (bus.Bus-1)*2
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(13, 34)(17, 36)(11, 38)
+                    row_Y[i] = (bus.Bus-1)*2+1
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(13, 35)(17, 37)(11, 39)
+                    row_Y[i] = (bus.Bus-1)*2+1
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(34, 34)(36, 36)(38. 38)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(34, 35)(36, 37)(38. 39)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(35, 34)(37, 36)(39. 38)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(35, 35)(37, 37)(39. 39)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(34, 12)(36, 16)(38. 10)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    columun_Y[i] = (bus.Bus-1)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(34, 13)(36, 17)(38. 11)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    columun_Y[i] = (bus.Bus-1)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(35, 12)(37, 16)(39. 10)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    columun_Y[i] = (bus.Bus-1)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(35, 13)(37, 17)(39. 11)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    columun_Y[i] = (bus.Bus-1)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(34, 40)(36, 42)(38, 44)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(34, 41)(36, 43)(38, 45)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(35, 40)(37, 42)(39, 44)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(35, 41)(37, 43)(39, 45)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+                    
+                    #(40, 12)(42, 16)(44, 10)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2
+                    columun_Y[i] = (bus.Bus-1)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(40, 13)(42, 17)(44, 11)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2
+                    columun_Y[i] = (bus.Bus-1)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(41, 12)(43, 16)(45, 10)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1
+                    columun_Y[i] = (bus.Bus-1)*2
+                    value_Y[i] = 0
+                    i = i+1
+
+                    #(41, 13)(43, 17)(45, 11)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1
+                    columun_Y[i] = (bus.Bus-1)*2+1
+                    value_Y[i] = 0
+                    i = i+1
+
+                    trans_index= trans_index+1
+        
+
+
+        trans_index = 0
+        for trans in parsed_data['xfmrs']:
+            for bus in parsed_data['buses']:
+                if (trans.from_bus) == (bus.Bus):    
+                    #(40, 6) (42, 6)(44, 8)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2 
+                    columun_Y[i] = (bus.Bus-1)*2
+                    value_Y[i] = 1  
+                    i = i+1 
+
+                    #(41, 7) (43, 7)(45, 9)
+                    row_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1 
+                    columun_Y[i] = (bus.Bus-1)*2+1
+                    value_Y[i] = 1  
+                    i = i+1
+
+                    #(6, 40) (6, 42)(8, 44)
+                    row_Y[i] = (bus.Bus-1)*2 
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2
+                    value_Y[i] = 1  
+                    i = i+1
+
+                    #(7, 41) (7, 43)(9, 45)
+                    row_Y[i] = (bus.Bus-1)*2+1 
+                    columun_Y[i] = (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1
+                    value_Y[i] = 1  
+                    #print (i, row_Y[i], columun_Y[i], value_Y[i])
+                    i = i+1
+
+                    trans_index= trans_index+1 
+        
+        trans_index = 0
+        for trans in parsed_data['xfmrs']:
+            for bus in parsed_data['buses']:
+                if (trans.to_bus) == (bus.Bus):
+                    for i1 in range (0, i): 
+                        if row_Y[i1] == (bus.Bus-1)*2: #(10, 10)(12, 12)(16, 16)
+                            if columun_Y[i1] == (bus.Bus-1)*2:
+                                value_temp = trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                                
+                        if row_Y[i1] == (bus.Bus-1)*2: #(12, 13)(16, 17)(10, 11)
+                            if columun_Y[i1] == (bus.Bus-1)*2+1:
+                                value_temp = trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                                
+                        if row_Y[i1] == (bus.Bus-1)*2+1: #(13, 12)(17, 16)(11, 10)
+                            if columun_Y[i1] == (bus.Bus-1)*2:
+                                value_temp = -1*trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                                
+                        if row_Y[i1] == (bus.Bus-1)*2+1: #(13, 13)(17, 17)(11, 11)
+                            if columun_Y[i1] == (bus.Bus-1)*2+1:
+                                value_temp = trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                                
+                        if row_Y[i1] == (bus.Bus-1)*2: #(12, 34)(16, 36)(10, 38)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2:
+                                value_temp = -1*trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus.Bus-1)*2: #(12, 35)(16, 37)(10, 39)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1:
+                                value_temp = -1*trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                        
+                        if row_Y[i1] == (bus.Bus-1)*2+1: #(13, 34)(17, 36)(11, 38)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2:
+                                value_temp = trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus.Bus-1)*2+1: #(13, 35)(17, 37)(11, 39)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1:
+                                value_temp = -1*trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2: #(34, 34)(36, 36)(38, 38)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2:
+                                value_temp = trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2: #(34, 35)(36, 37)(38, 39)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1:
+                                value_temp = trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1: #(35, 34)(37, 36)(39, 38)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2:
+                                value_temp = -1*trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1: #(35, 34)(37, 36)(39, 38)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1:
+                                value_temp = trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2: #(34, 12)(36, 16)(38, 10)
+                            if columun_Y[i1] == (bus.Bus-1)*2:
+                                value_temp = -1*trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2: #(34, 13)(36, 17)(38, 11)
+                            if columun_Y[i1] == (bus.Bus-1)*2+1:
+                                value_temp = -1*trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1: #(35, 12)(37, 16)(39, 10)
+                            if columun_Y[i1] == (bus.Bus-1)*2:
+                                value_temp = trans.x/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1: #(35, 13)(37, 17)(39, 11)
+                            if columun_Y[i1] == (bus.Bus-1)*2+1:
+                                value_temp = -1*trans.r/(np.square(trans.r)+np.square(trans.x))
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                                
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2: #(34, 40)(36, 42)(38, 44)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2:
+                                angle = trans.ang*np.pi/180
+                                value_temp = -1*trans.tr*np.cos(angle)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2: #(34, 41)(36, 43)(38, 45)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1:
+                                angle = trans.ang*np.pi/180
+                                value_temp = -1*trans.tr*np.sin(angle)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1: #(35, 40)(37, 42)(39, 44)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2:
+                                angle = trans.ang*np.pi/180
+                                value_temp = trans.tr*np.sin(angle)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                        
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+(trans_index)*2+1: #(35, 41)(37, 43)(39, 45)
+                            if columun_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1:
+                                angle = trans.ang*np.pi/180
+                                value_temp = -1*trans.tr*np.cos(angle)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2: #(40, 12)(42, 16)(44, 10)
+                            if columun_Y[i1] == (bus.Bus-1)*2:
+                                angle = trans.ang*np.pi/180
+                                value_temp = trans.tr*np.cos(angle)*(-1)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2: #(40, 13)(42, 17)(44, 11)
+                            if columun_Y[i1] == (bus.Bus-1)*2+1:
+                                angle = trans.ang*np.pi/180
+                                value_temp = -1*trans.tr*np.sin(angle)*(-1)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1: #(41, 12)(43, 16)(45, 10)
+                            if columun_Y[i1] == (bus.Bus-1)*2:
+                                angle = trans.ang*np.pi/180
+                                value_temp = trans.tr*np.sin(angle)*(-1)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+
+                        if row_Y[i1] == (bus_number*2+gen_number+slack_number*2)+trans_number*2+(trans_index)*2+1: #(41, 13)(43, 17)(45, 11)
+                            if columun_Y[i1] == (bus.Bus-1)*2+1:
+                                angle = trans.ang*np.pi/180
+                                value_temp = trans.tr*np.cos(angle)*(-1)
+                                value_Y[i1] = value_Y[i1]+ value_temp
+                                #print (row_Y[i1], columun_Y[i1], value_Y[i1], angle)
+
+
+                    trans_index = trans_index+1
+
+        for shunt in parsed_data['shunts']:
+            for bus in parsed_data['buses']:
+                if shunt.Bus == bus.Bus:    
+                    for i1 in range (0, i):
+                        if row_Y[i1] == (bus.Bus-1)*2:#(16 16)
+                            if columun_Y[i1] == (bus.Bus-1)*2:
+                                value_Y[i1] = value_Y[i1]+ shunt.G_MW #changed to p.u already.
+                        if row_Y[i1] == (bus.Bus-1)*2:#(16 17)
+                            if columun_Y[i1] == ((bus.Bus-1)*2+1):
+                                value_Y[i1] = value_Y[i1]+shunt.B_MVAR*(-1) #changed to p.u already.
+                        if row_Y[i1] == (bus.Bus-1)*2+1:#(17 16)
+                            if columun_Y[i1] == ((bus.Bus-1)*2):
+                                value_Y[i1] = value_Y[i1]+shunt.B_MVAR #changed to p.u already.
+                        if row_Y[i1] == (bus.Bus-1)*2+1:#(17 16)
+                            if columun_Y[i1] == ((bus.Bus-1)*2)+1:
+                                value_Y[i1] = value_Y[i1]+shunt.G_MW #changed to p.u already.
+                                #print ('!!!!!', row_Y[i1], columun_Y[i1], shunt.G_MW)
 
         #Create the first J
         #for slack bus
@@ -475,7 +803,6 @@ class PowerFlow:
             matrix_J[bus_number*2+gen_number*1+(i_slack)*2+1] = Vset_l
 
             i_slack = i_slack+1
-            #print (slack.Bus)
 
         #for PQ bus
         i_index = 0
@@ -536,9 +863,10 @@ class PowerFlow:
                     
                     matrix_J[(bus.Bus-1)*2] = Vrl_hist
                     matrix_J[(bus.Bus-1)*2+1] = Vil_hist
-                    #print (Vrl, Vil, 'vs ', v_init[i_index*2], v_init[i_index*2+1])
+                    #print ((bus.Bus-1)*2, (bus.Bus-1)*2+1)
                     i_index = i_index+1
-
+        
+        gen_index = 0
         for gen in parsed_data['generators']:
             for bus in parsed_data['buses']:
                 if bus.Bus == gen.Bus:
@@ -568,11 +896,13 @@ class PowerFlow:
                     matrix_J[(bus.Bus-1)*2] = Vrg_hist
                     matrix_J[(bus.Bus-1)*2+1] = Vig_hist
 
-                    #print (Vrg, Vig, 'vs ', v_init[i_index*2], v_init[i_index*2+1])
+                    #print ((bus.Bus-1)*2, (bus.Bus-1)*2+1)
 
                     #Veq_hist, Vrg and Vig
                     Veg_hist = np.square(VSet)+np.square(Vrg)+np.square(Vig)
-                    matrix_J[(bus.Bus-1)*2+2] = Veg_hist
+                    matrix_J[bus_number*2+gen_index] = Veg_hist
+                    #print (bus_number*2+gen_index)
+
                     i_index = i_index+1
 
                     #gen bus also has P and Q connected to them, and P and Q need to be added into the matrix.
@@ -600,10 +930,28 @@ class PowerFlow:
                     
                             matrix_J[(bus.Bus-1)*2] += Vrl_hist
                             matrix_J[(bus.Bus-1)*2+1] += Vil_hist
+                            #print ((bus.Bus-1)*2, (bus.Bus-1)*2+1)
+                    
+            gen_index = gen_index+1
+
+            
 
         return (row_Y, columun_Y, value_Y, matrix_J)
 
-    def stamp_nonlinear(self, err_max, v_init, row_Y, columun_Y, value_Y, parsed_data, v_last):
+    def stamp_nonlinear(self, err_max, v_init, row_Y, columun_Y, value_Y, parsed_data, v_last, size_Y_csc):
+        bus_number =  0
+        slack_number =  0
+        gen_number = 0
+        trans_number = 0
+        for bus in parsed_data['buses']:
+            bus_number = bus_number+1 #each bus contributes 2 variables in V (Vr, Vi)
+        for slack in parsed_data['slack']:
+            slack_number = slack_number+1 #each slack contributes 2 variables in V. (Ir, Ii)
+        for gen in parsed_data['generators']:
+            gen_number = gen_number+1 #each generators contributes 1 variable in V. (Qg)  
+        for trans in parsed_data['xfmrs']:
+            trans_number = trans_number+1
+        
         v_index = 0
         for slack in parsed_data['slack']:
             for bus in parsed_data['buses']:
@@ -627,7 +975,7 @@ class PowerFlow:
                             Iil = (Pl*Vil-Ql*Vrl)/(np.square(Vrl)+np.square(Vil))
 
                             
-                            for i1 in range (0, 56):
+                            for i1 in range (0, size_Y_csc):
                                 #add dIrl_dVrl to the Y matrix (0, 0)
                                 if row_Y[i1] == (bus.Bus-1)*2:
                                     if columun_Y[i1] == (bus.Bus-1)*2:
@@ -675,7 +1023,7 @@ class PowerFlow:
                     dIil_dVil = (Pl*(np.square(Vrl)+np.square(Vil))-(Pl*Vil-1*Ql*Vrl)*2*Vil)/np.square(np.square(Vrl)+np.square(Vil))
 
                     #add PQ bus parameters
-                    for i1 in range (0, 56):
+                    for i1 in range (0, size_Y_csc):
                     #add dIrl_dVrl to the Y matrix
                         if row_Y[i1] == (bus.Bus-1)*2:
                             if columun_Y[i1] == (bus.Bus-1)*2:
@@ -697,7 +1045,8 @@ class PowerFlow:
                                 value_Y[i1]=value_Y[i1]+dIil_dVil
                                 #print(row_Y[i1], columun_Y[i1])
                     v_index = v_index+1
-
+        
+        gen_index = 0
         for gen in parsed_data['generators']:
             for bus in parsed_data['buses']:
                 if bus.Bus == gen.Bus:
@@ -723,7 +1072,7 @@ class PowerFlow:
                     dIig_dQg = 1*Vrg/(np.square(Vrg)+np.square(Vig))
                     
                     #add PV bus parameters
-                    for i1 in range (0, 56):
+                    for i1 in range (0, size_Y_csc):
                         #add dIrg_dVrg to the Y matrix
                         if row_Y[i1] == (bus.Bus-1)*2:
                             if columun_Y[i1] == (bus.Bus-1)*2:
@@ -737,8 +1086,8 @@ class PowerFlow:
                                 #print (row_Y[i1], columun_Y[i1], value_Y[i1])
                     
                         #add dIrg_dQ to the Y matrix
-                        if row_Y[i1] == (bus.Bus-1)*2:
-                            if columun_Y[i1] == (bus.Bus-1)*2+2:
+                        if row_Y[i1] == (bus.Bus-1)*2: #(2 28)(4 29)(10 30)(14 31)
+                            if columun_Y[i1] == (bus_number)*2+gen_index:
                                 value_Y[i1]=value_Y[i1]+dIrg_dQg
                                 #print (row_Y[i1], columun_Y[i1], value_Y[i1])
 
@@ -755,19 +1104,21 @@ class PowerFlow:
                                 #print (row_Y[i1], columun_Y[i1], value_Y[i1])
 
                         #add dIig_dQ to the Y matrix
-                        if row_Y[i1] == (bus.Bus-1)*2+1:
-                            if columun_Y[i1] == (bus.Bus-1)*2+2:
+                        if row_Y[i1] == (bus.Bus-1)*2+1: #(3 28)(5 29)(11 30)(15 31)
+                            if columun_Y[i1] == (bus_number)*2+gen_index:
                                 value_Y[i1]=value_Y[i1]+dIig_dQg
                                 #print (row_Y[i1], columun_Y[i1], value_Y[i1])
                     
                         #add 2Vrg and 2Vig into the Y matrix
-                        if row_Y[i1] == (bus.Bus-1)*2+2:
+                        if row_Y[i1] == (bus_number)*2+gen_index:
                             if columun_Y[i1] == (bus.Bus-1)*2:
                                 value_Y[i1]=value_Y[i1]+2*Vrg
+                                #print (row_Y[i1], columun_Y[i1], value_Y[i1])
 
-                        if row_Y[i1] == (bus.Bus-1)*2+2:
+                        if row_Y[i1] == (bus_number)*2+gen_index:
                             if columun_Y[i1] == (bus.Bus-1)*2+1:
                                 value_Y[i1]=value_Y[i1]+2*Vig
+                                #print (row_Y[i1], columun_Y[i1], value_Y[i1])
                     
                     for load in parsed_data['loads']:
                         if (load.Bus == bus.Bus): 
@@ -788,7 +1139,7 @@ class PowerFlow:
                             Iil = (Pl*Vil-Ql*Vrl)/(np.square(Vrl)+np.square(Vil))
 
                             #gen bus also has P and Q connected to them, and P and Q need to be added into the matrix.
-                            for i1 in range (0, 56):
+                            for i1 in range (0, size_Y_csc):
                                 #add dIrg_dVrg to the Y matrix (6, 6)
                                 if row_Y[i1] == (bus.Bus-1)*2:
                                     if columun_Y[i1] == (bus.Bus-1)*2:
@@ -809,6 +1160,7 @@ class PowerFlow:
                                     if columun_Y[i1] == (bus.Bus-1)*2+1:
                                         value_Y[i1]=value_Y[i1]+dIil_dVil
                                         #print ("here!!!", row_Y[i1], columun_Y[i1], value_Y[i1])
+                    gen_index = gen_index +1
                                 
         return (err_max, row_Y, columun_Y, value_Y)
 
@@ -828,7 +1180,8 @@ class PowerFlow:
                       tol_setting,
                       size_Y,
                       matrix_v, 
-                      matrix_J):
+                      matrix_J,
+                      size_Y_csc):
         """Runs a positive sequence power flow using the Equivalent Circuit Formulation.
 
         Args:
@@ -880,25 +1233,32 @@ class PowerFlow:
             # TODO: PART 1, STEP 2.4 - Complete the stamp_nonlinear function which stamps all nonlinear power grid
             #  elements. This function should call the stamp_nonlinear function of each nonlinear element and return
             #  an updated Y matrix. You need to decide the input arguments and return values.
-            (err_max, row_Y, columun_Y, value_Y) = self.stamp_nonlinear(err_max, v_init, row_Y, columun_Y, value_Y, parsed_data, v_last)
+            (err_max, row_Y, columun_Y, value_Y) = self.stamp_nonlinear(err_max, v_init, row_Y, columun_Y, value_Y, parsed_data, v_last, size_Y_csc)
             
             matrix_Y = csc_matrix((value_Y, (row_Y, columun_Y)), shape=(size_Y, size_Y))
             matrix_Y_dense = matrix_Y.todense()
-            #print ('Y =', matrix_Y_dense)
+            #print('Y =', matrix_Y_dense)
+
+            #for i1 in range (0, size_Y):
+            #    for i in range(0,size_Y_csc-1):
+            #        if columun_Y[i]==i1:
+            #            print (columun_Y[i], row_Y[i], value_Y[i])
+
             #print ('J = ', matrix_J)
+
 
             # # # Solve The System # # #
             # TODO: PART 1, STEP 2.5 - Complete the solve function which solves system of equations Yv = J. The
             #  function should return a new v_sol.
             #  You need to decide the input arguments and return values.
             (matrix_v, matrix_J) = self.solver(matrix_Y, matrix_v, matrix_J, parsed_data)
-                        
+            print ('NR iteration =', NR_count)
+            print ('v = ', matrix_v)
+
             # # # Compute The Error at the current NR iteration # # #
             # TODO: PART 1, STEP 2.6 - Finish the check_error function which calculates the maximum error, err_max
             #  You need to decide the input arguments and return values.
             err_max = self.check_error(matrix_v, v_last)
-            print ('NR iteration =', NR_count)
-            print ('v = ', matrix_v)
             print ('err = ', err_max, '\n')
             
             #err_max = 0
